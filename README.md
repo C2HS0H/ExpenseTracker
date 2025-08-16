@@ -24,7 +24,7 @@ You can add, update, and delete expenses, view your total spending, and check yo
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/ExpenseTracker.git
+   git clone https://github.com/C2HS0H/ExpenseTracker.git
    cd ExpenseTracker
    ```
 
@@ -52,4 +52,5 @@ The executable will be available in the `dist/` folder.
 
 ## 📄 License
 This project is licensed under the MIT License — feel free to use and modify it.
+
 
