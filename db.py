@@ -1,68 +1,82 @@
 import sqlite3
+import datetime as dt
 
 class Database:
-    def __init__(self, db):
+    def __init__(self, db="expenses.db"):
         self.conn = sqlite3.connect(db)
-        self.cur = self.conn.cursor()
+        self.cursor = self.conn.cursor()
+        self.create_tables()
 
-        # Create expense table if it doesn't exist
-        self.cur.execute("""
-            CREATE TABLE IF NOT EXISTS expense_record (
-                item_name TEXT,
-                item_price REAL,
-                purchase_date DATE
-            )
+    def create_tables(self):
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS expense_record (
+            item_name TEXT NOT NULL,
+            item_price REAL NOT NULL,
+            purchase_date TEXT NOT NULL,
+            category TEXT
+        )
         """)
-
-        # Create settings table if it doesn't exist
-        self.cur.execute("""
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value REAL
-            )
-        """)
-
-        # Ensure there is at least one default balance stored
-        if self.get_balance() is None:
-            self.set_balance(140220.06)
-
+        
+        self.create_monthly_budget_table()
         self.conn.commit()
 
-    # ===== Expense CRUD =====
-    def fetch_record(self, query):
-        self.cur.execute(query)
-        return self.cur.fetchall()
+    def create_monthly_budget_table(self):
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS monthly_budget (
+            month TEXT PRIMARY KEY,
+            budget REAL NOT NULL
+        )
+        """)
+        self.conn.commit()
 
-    def insert_record(self, item_name, item_price, purchase_date):
-        self.cur.execute("INSERT INTO expense_record VALUES (?, ?, ?)",
-                         (item_name, float(item_price), purchase_date))
+    def insert_record(self, item_name, item_price, purchase_date, category):
+        self.cursor.execute("""
+        INSERT INTO expense_record (item_name, item_price, purchase_date, category)
+        VALUES (?, ?, ?, ?)
+        """, (item_name, item_price, purchase_date, category))
+        self.conn.commit()
+
+    def fetch_record(self, query, params=()):
+        self.cursor.execute(query, params)
+        return self.cursor.fetchall()
+
+    def update_record(self, item_name, item_price, purchase_date, category, rowid):
+        self.cursor.execute("""
+        UPDATE expense_record
+        SET item_name = ?, item_price = ?, purchase_date = ?, category = ?
+        WHERE rowid = ?
+        """, (item_name, item_price, purchase_date, category, rowid))
         self.conn.commit()
 
     def remove_record(self, rowid):
-        self.cur.execute("DELETE FROM expense_record WHERE rowid=?", (rowid,))
+        self.cursor.execute("DELETE FROM expense_record WHERE rowid = ?", (rowid,))
         self.conn.commit()
 
-    def update_record(self, item_name, item_price, purchase_date, rowid):
-        self.cur.execute("""
-            UPDATE expense_record
-            SET item_name = ?, item_price = ?, purchase_date = ?
-            WHERE rowid = ?
-        """, (item_name, float(item_price), purchase_date, rowid))
+    def set_monthly_budget(self, amount):
+        month = dt.datetime.now().strftime("%Y-%m")
+        self.cursor.execute("""
+        INSERT INTO monthly_budget (month, budget)
+        VALUES (?, ?)
+        ON CONFLICT(month) DO UPDATE SET budget=excluded.budget
+        """, (month, amount))
         self.conn.commit()
 
-    # ===== Balance Management =====
-    def get_balance(self):
-        self.cur.execute("SELECT value FROM settings WHERE key='initial_balance'")
-        row = self.cur.fetchone()
-        return row[0] if row else None
+    def get_monthly_budget(self):
+        month = dt.datetime.now().strftime("%Y-%m")
+        self.cursor.execute("SELECT budget FROM monthly_budget WHERE month = ?", (month,))
+        row = self.cursor.fetchone()
+        return row[0] if row else 0.0
 
-    def set_balance(self, value):
-        self.cur.execute("""
-            INSERT INTO settings (key, value)
-            VALUES ('initial_balance', ?)
-            ON CONFLICT(key) DO UPDATE SET value=excluded.value
-        """, (float(value),))
-        self.conn.commit()
+    def get_monthly_remaining_balance(self):
+        month = dt.datetime.now().strftime("%Y-%m")
+        budget = self.get_monthly_budget()
+        self.cursor.execute("""
+        SELECT SUM(item_price) FROM expense_record
+        WHERE strftime('%Y-%m', purchase_date) = ?
+        """, (month,))
+        spent = self.cursor.fetchone()[0] or 0.0
+        remaining = budget - spent
+        return remaining, budget, spent
 
-    def __del__(self):
+    def close(self):
         self.conn.close()
