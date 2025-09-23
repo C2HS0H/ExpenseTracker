@@ -4,7 +4,7 @@ A simple desktop application built with **Python (Tkinter)** to help you manage 
 You can add, update, and delete expenses, view your total spending, check your remaining balance, and analyze your expenses with interactive charts — all in a clean, modern UI.
 
 <div align="center">
-<img src="https://i.ibb.co/SD4pb41D/python-klsf-Mn2c-PW.png" width="500" height="400"/>
+<img src="https://i.ibb.co/ccxQg5B2/python-44-V5-Ib-W0-Vr.png" width="500" height="400"/>
 <img src="https://i.ibb.co/qM26MC3J/python-Lbk-OQd-UFh-L.png" width="650" height="360"/>
 </div>
 
@@ -12,9 +12,9 @@ You can add, update, and delete expenses, view your total spending, check your r
 
 ## ✨ Features
 
-- Add / update / delete expense records
+- Add / update / search / delete expense records
 - View all expenses in a table with serial numbers, item names, prices, dates, and categories
-- Total spent & monthly balance check with one click (balance will not show negative)
+- Total spent & monthly balance check with one click
 - Upload receipt images and auto-extract items using OCR
 - Persistent storage using **SQLite**
 - **Analytics & Forecast** window:
@@ -25,9 +25,7 @@ You can add, update, and delete expenses, view your total spending, check your r
     - Holt-Winters trend / seasonality (medium history)
     - Prophet model (long history)
 - Beautiful dark theme UI with emoji buttons
-- Autocomplete for item names
 - Cross-platform (Windows, macOS, Linux)
-- Smooth forecast visualization with highlighted predicted points
 
 ---
 

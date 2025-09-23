@@ -19,7 +19,7 @@ class ExpenseTrackerApp(tk.Tk):
         self.resizable(False, False)
 
         self.db = Database(db="expenses.db")
-        self.db.create_monthly_budget_table()  
+        self.db.create_monthly_budget_table()
 
         self.selected_rowid = 0
         self.categories = [
@@ -81,7 +81,7 @@ class ExpenseTrackerApp(tk.Tk):
         frame.grid_rowconfigure(0, weight=1)
         frame.grid_columnconfigure(0, weight=1)
 
-        input_frame = ttk.LabelFrame(self, text="Add / Update Expense", padding=8)
+        input_frame = ttk.LabelFrame(self, text="Add/Update/Search Expenses", padding=8)
         input_frame.pack(pady=8, padx=20, fill="x")
 
         left_frame = ttk.Frame(input_frame)
@@ -112,7 +112,7 @@ class ExpenseTrackerApp(tk.Tk):
 
         right_frame = ttk.Frame(input_frame)
         right_frame.grid(row=0, column=2, padx=8, pady=4, sticky="n")
-        ttk.Label(right_frame, text="OR").pack(pady=4)
+        ttk.Label(right_frame, text="Add Expenses from Image").pack(pady=4)
         ttk.Button(right_frame, text="📷 Upload Receipt", style="Emoji.TButton", width=20, command=self.upload_receipt).pack(pady=8)
 
         btn_width = 14
@@ -124,7 +124,7 @@ class ExpenseTrackerApp(tk.Tk):
         ttk.Button(button_frame, text="📝 Update", style="Emoji.TButton", width=btn_width, command=self.update_record).grid(row=0, column=2, padx=4, pady=4)
         ttk.Button(button_frame, text="❌ Delete", style="Emoji.TButton", width=btn_width, command=self.delete_record).grid(row=0, column=3, padx=4, pady=4)
 
-        ttk.Button(button_frame, text="📆 Current Date", style="Emoji.TButton", width=btn_width, command=self.set_date).grid(row=1, column=0, padx=4, pady=4)
+        ttk.Button(button_frame, text="🔎 Search", style="Emoji.TButton", width=btn_width, command=self.search_records).grid(row=1, column=0, padx=4, pady=4)
         ttk.Button(button_frame, text="💳 Total Spent", style="Emoji.TButton", width=btn_width, command=self.show_total_spent).grid(row=1, column=1, padx=4, pady=4)
         ttk.Button(button_frame, text="💰 Balance", style="Emoji.TButton", width=btn_width, command=self.balance_options).grid(row=1, column=2, padx=4, pady=4)
         ttk.Button(button_frame, text="📊 Analytics", style="Emoji.TButton", width=btn_width, command=self.open_analytics_window).grid(row=1, column=3, padx=4, pady=4)
@@ -186,8 +186,6 @@ class ExpenseTrackerApp(tk.Tk):
             if category not in self.category_entry["values"]:
                 self.category_entry["values"] = list(self.category_entry["values"]) + [category]
 
-            self.see_last_row()
-
     def set_date(self):
         self.transaction_date_entry.set_date(dt.datetime.now())
 
@@ -198,17 +196,22 @@ class ExpenseTrackerApp(tk.Tk):
         self.category_entry.set("Other")
         self.set_date()
         self.item_name_entry.focus()
+        self.refresh_data()
+        self.status_label.config(text="Ready", foreground="white")
 
     def refresh_data(self):
+
+        records = self.db.fetch_record("SELECT rowid, * FROM expense_record ORDER BY purchase_date ASC")
+        self.populate_treeview(records)
+
+    def populate_treeview(self, records):
         self.tbl.delete(*self.tbl.get_children())
-        records = self.db.fetch_record("SELECT rowid, * FROM expense_record")
         for idx, rec in enumerate(records, start=1):
             price = rec[2] if rec[2] is not None else 0.0
             self.tbl.insert(parent="", index="end", iid=rec[0], values=(idx, rec[1], f"{price:.2f}", rec[3], rec[4]))
         self.see_last_row()
 
     def see_last_row(self):
-
         children = self.tbl.get_children()
         if children:
             self.tbl.see(children[-1])
@@ -288,6 +291,62 @@ class ExpenseTrackerApp(tk.Tk):
         self.item_amt_entry.insert(0, values[2])
         self.transaction_date_entry.set_date(values[3])
         self.category_entry.set(values[4])
+
+    def search_records(self):
+        name_query = self.item_name_entry.get()
+        price_query = self.item_amt_entry.get()
+        date_query = self.transaction_date_entry.get()
+
+        base_query = "SELECT rowid, * FROM expense_record "
+        conditions = []
+        params = []
+
+        if name_query or price_query:
+            include_date = messagebox.askyesno(
+                "Confirm Search Criteria",
+                "Filter by the selected date as well?\n\n"
+                "• Yes: Search using Name/Price AND the exact Date.\n"
+                "• No: Search using only Name and/or Price."
+            )
+
+            if name_query:
+                conditions.append("item_name LIKE ?")
+                params.append(f"%{name_query}%")
+
+            if price_query:
+                try:
+                    price = float(price_query)
+                    conditions.append("item_price = ?")
+                    params.append(price)
+                except ValueError:
+                    messagebox.showerror("Search Error", "Price must be a valid number for searching.")
+                    return
+
+            if include_date:
+                conditions.append("purchase_date = ?")
+                params.append(date_query)
+                self.status_label.config(text=f"🔎 Searching for items matching criteria on {date_query}", foreground="cyan")
+            else:
+                self.status_label.config(text="🔎 Displaying search results", foreground="cyan")
+
+        else:
+            month_str = self.transaction_date_entry.get_date().strftime("%Y-%m")
+            conditions.append("strftime('%Y-%m', purchase_date) = ?")
+            params.append(month_str)
+            self.status_label.config(text=f"🔎 Showing all records for month: {month_str}", foreground="cyan")
+
+        if not conditions:
+            self.refresh_data()
+            self.status_label.config(text="Ready", foreground="white")
+            return
+
+        query = base_query + "WHERE " + " AND ".join(conditions) + " ORDER BY purchase_date ASC"
+
+        records = self.db.fetch_record(query, tuple(params))
+        if not records:
+            messagebox.showinfo("No Results", "No records found matching your search criteria.")
+
+        self.populate_treeview(records)
 
     def upload_receipt(self):
         try:
