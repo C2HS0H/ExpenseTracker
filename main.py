@@ -253,8 +253,27 @@ class ExpenseTrackerApp(tk.Tk):
             self.status_label.config(text="✅ Record deleted successfully", foreground="green")
 
     def show_total_spent(self):
-        total_spent = sum(rec[0] for rec in self.db.fetch_record("SELECT item_price FROM expense_record"))
-        messagebox.showinfo("Total Spent", f"Total Expenses: Rs. {total_spent:.2f}")
+        total_spent_all_records = sum(rec[0] for rec in self.db.fetch_record("SELECT item_price FROM expense_record"))
+        total_spent_displayed_records = 0.0
+        for item_iid in self.tbl.get_children():
+            values = self.tbl.item(item_iid)["values"]
+            try:
+                total_spent_displayed_records += float(values[2])
+            except (ValueError, IndexError):
+                pass
+
+        if self.tbl.get_children():
+            messagebox.showinfo(
+                "Total Spent",
+                f"Total Expenses (All Records): Rs. {total_spent_all_records:.2f}\n"
+                f"Total Expenses (Displayed): Rs. {total_spent_displayed_records:.2f}"
+            )
+        else:
+            messagebox.showinfo(
+                "Total Spent",
+                f"Total Expenses (All Records): Rs. {total_spent_all_records:.2f}\n"
+                f"No records are currently displayed to calculate a specific total."
+            )
 
     def show_balance(self):
         remaining, monthly_budget, spent = self.db.get_monthly_remaining_balance()
