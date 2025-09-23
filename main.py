@@ -186,6 +186,8 @@ class ExpenseTrackerApp(tk.Tk):
             if category not in self.category_entry["values"]:
                 self.category_entry["values"] = list(self.category_entry["values"]) + [category]
 
+            self.see_last_row()
+
     def set_date(self):
         self.transaction_date_entry.set_date(dt.datetime.now())
 
@@ -199,9 +201,17 @@ class ExpenseTrackerApp(tk.Tk):
 
     def refresh_data(self):
         self.tbl.delete(*self.tbl.get_children())
-        for idx, rec in enumerate(self.db.fetch_record("SELECT rowid, * FROM expense_record"), start=1):
+        records = self.db.fetch_record("SELECT rowid, * FROM expense_record")
+        for idx, rec in enumerate(records, start=1):
             price = rec[2] if rec[2] is not None else 0.0
             self.tbl.insert(parent="", index="end", iid=rec[0], values=(idx, rec[1], f"{price:.2f}", rec[3], rec[4]))
+        self.see_last_row()
+
+    def see_last_row(self):
+
+        children = self.tbl.get_children()
+        if children:
+            self.tbl.see(children[-1])
 
     def balance_options(self):
         choice = messagebox.askquestion(
@@ -319,8 +329,8 @@ class ExpenseTrackerApp(tk.Tk):
                 if desc not in self.item_name_entry.suggestions:
                     self.item_name_entry.suggestions.append(desc)
             self.refresh_data()
-            messagebox.showinfo("Success", f"OCR completed.\nAdded {len(items)} items from receipt.")
             self.status_label.config(text=f"✅ Added {len(items)} items from receipt", foreground="green")
+            messagebox.showinfo("Success", f"OCR completed.\nAdded {len(items)} items from receipt.")
         except requests.exceptions.RequestException as e:
             self.status_label.config(text="❌ Connection Error", foreground="red")
             messagebox.showerror("Connection Error", f"Could not reach OCR API.\n{e}")
