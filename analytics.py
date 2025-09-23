@@ -6,7 +6,8 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.dates import DateFormatter
 from sklearn.linear_model import LinearRegression
-
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from prophet import Prophet
 
 class AnalyticsWindow(tk.Toplevel):
     def __init__(self, master, db):
@@ -36,13 +37,13 @@ class AnalyticsWindow(tk.Toplevel):
         )
         self.prediction_label.pack()
 
-        self.pie_frame = ttk.LabelFrame(
+        self.category_frame = ttk.LabelFrame(
             main_frame, text="Spending by Category", padding="5"
         )
-        self.pie_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        self.category_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
         self.line_frame = ttk.LabelFrame(
-            main_frame, text="Spending Over Time", padding="5"
+            main_frame, text="Monthly Spending Forecast", padding="5"
         )
         self.line_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
 
@@ -67,11 +68,12 @@ class AnalyticsWindow(tk.Toplevel):
             return
 
         self.create_category_bar_chart(df)
-        monthly_data = self.create_stacked_monthly_chart(df)
-        self.run_prediction(monthly_data)
+        self.create_monthly_line_chart(df)
 
     def create_category_bar_chart(self, df):
-        category_spending = df.groupby("category")["price"].sum().sort_values(ascending=True)
+        category_spending = (
+            df.groupby("category")["price"].sum().sort_values(ascending=True)
+        )
         if category_spending.empty:
             return
 
@@ -86,26 +88,60 @@ class AnalyticsWindow(tk.Toplevel):
         ax.set_facecolor("#3c3c3c")
         fig.tight_layout(pad=2.0)
 
-        canvas = FigureCanvasTkAgg(fig, master=self.pie_frame)
+        canvas = FigureCanvasTkAgg(fig, master=self.category_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(expand=True, fill="both")
 
-    def create_stacked_monthly_chart(self, df):
-        df_monthly = df.groupby([pd.Grouper(key="date", freq="ME"), "category"])["price"].sum().unstack(fill_value=0)
-        df_monthly = df_monthly[df_monthly.sum(axis=1) > 0]
+    def create_monthly_line_chart(self, df):
+        df_monthly = (
+            df.groupby(pd.Grouper(key="date", freq="ME"))["price"].sum().reset_index()
+        )
+        df_monthly = df_monthly[df_monthly["price"] > 0]
+
+        future_months = 3
+        forecasts = []
+
+        if len(df_monthly) >= 2:
+            for i in range(future_months):
+                pred = self.run_prediction(df_monthly, update_label=(i == 0))
+                if pred is not None:
+                    df_monthly = pd.concat(
+                        [
+                            df_monthly,
+                            pd.DataFrame(
+                                {
+                                    "date": [df_monthly["date"].max() + pd.offsets.MonthEnd()],
+                                    "price": [pred],
+                                }
+                            ),
+                        ],
+                        ignore_index=True,
+                    )
+                    forecasts.append(pred)
 
         fig = Figure(figsize=(6, 4), dpi=100, facecolor="#2b2b2b")
         ax = fig.add_subplot(111)
 
-        bottom = np.zeros(len(df_monthly))
-        colors = ["#0078D4", "#FF6F61", "#6A5ACD", "#FFA500", "#2E8B57", "#D2691E"]
+        ax.plot(
+            df_monthly["date"],
+            df_monthly["price"],
+            marker="o",
+            color="#C81B5A",
+            label="Spending",
+        )
 
-        for i, category in enumerate(df_monthly.columns):
-            ax.bar(df_monthly.index, df_monthly[category], bottom=bottom, label=category,
-                   color=colors[i % len(colors)])
-            bottom += df_monthly[category].values
+        if forecasts:
+            forecast_start = len(df_monthly) - len(forecasts) - 1
+            ax.plot(
+                df_monthly["date"].iloc[forecast_start:],
+                df_monthly["price"].iloc[forecast_start:],
+                marker="o",
+                linestyle="--",
+                color="orange",
+                label="Forecast",
+            )
 
-        ax.set_title("Monthly Spending by Category", color="white", fontsize=12)
+        ax.set_title("Monthly Spending Forecast", color="white", fontsize=12)
         ax.set_ylabel("Total Spent (Rs.)", color="white", fontsize=10)
         ax.tick_params(axis="x", colors="white", rotation=45, labelsize=10)
         ax.tick_params(axis="y", colors="white", labelsize=10)
@@ -113,30 +149,69 @@ class AnalyticsWindow(tk.Toplevel):
         ax.set_facecolor("#3c3c3c")
         ax.xaxis.set_major_formatter(DateFormatter("%b-%Y"))
         ax.legend(facecolor="#2b2b2b", edgecolor="white", labelcolor="white", fontsize=8)
+
         fig.tight_layout(pad=2.0)
 
         canvas = FigureCanvasTkAgg(fig, master=self.line_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(expand=True, fill="both")
-        
-        return df_monthly.sum(axis=1).reset_index(name="price")
 
-    def run_prediction(self, monthly_data):
-        if len(monthly_data) < 2:
-            self.prediction_label.config(
-                text="Need at least 2 months of data for a forecast."
+    def run_prediction(self, monthly_data, update_label=True):
+        n_months = len(monthly_data)
+        prediction = None
+        model_used = None
+
+        if n_months < 2:
+            if update_label:
+                self.prediction_label.config(
+                    text="Need at least 2 months of data for a forecast."
+                )
+            return None
+
+        if n_months < 6:
+            X = np.arange(n_months).reshape(-1, 1)
+            y = monthly_data["price"].values
+            model = LinearRegression().fit(X, y)
+            prediction = model.predict([[n_months]])[0]
+            model_used = "Linear Regression"
+
+        elif 6 <= n_months < 12:
+            series = monthly_data.set_index("date")["price"]
+            if series.index.freq is None:
+                series.index.freq = 'ME'  
+
+            model = ExponentialSmoothing(series, trend="add", seasonal=None).fit()
+            prediction = model.forecast(1).iloc[0]
+            model_used = "Holt-Winters (Trend)"
+
+        elif 12 <= n_months < 18:
+            series = monthly_data.set_index("date")["price"]
+            if series.index.freq is None:
+                series.index.freq = 'ME'  
+
+            model = ExponentialSmoothing(
+                series, trend="add", seasonal="add", seasonal_periods=12
+            ).fit()
+            prediction = model.forecast(1).iloc[0]
+            model_used = "Holt-Winters (Trend + Seasonality)"
+
+        else:
+            df = monthly_data.rename(columns={"date": "ds", "price": "y"})
+            model = Prophet(
+                yearly_seasonality=True,
+                weekly_seasonality=False,
+                daily_seasonality=False,
             )
-            return
+            model.fit(df)
+            future = model.make_future_dataframe(periods=1, freq='M')
+            forecast = model.predict(future)
+            prediction = forecast.iloc[-1]["yhat"]
+            model_used = "Prophet"
 
-        X = np.arange(len(monthly_data)).reshape(-1, 1)
-        y = monthly_data["price"].values
+        if update_label and prediction is not None:
+            self.prediction_label.config(
+                text=f"Forecast for Next Month: Rs. {prediction:.2f}\nModel used: {model_used}",
+                foreground="cyan",
+            )
 
-        model = LinearRegression()
-        model.fit(X, y)
-
-        next_month_index = len(monthly_data)
-        prediction = model.predict([[next_month_index]])[0]
-
-        self.prediction_label.config(
-            text=f"Forecast for Next Month: Rs. {prediction:.2f}", foreground="cyan"
-        )
+        return prediction

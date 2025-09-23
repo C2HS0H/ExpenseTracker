@@ -1,6 +1,7 @@
 import sqlite3
 import datetime as dt
 
+
 class Database:
     def __init__(self, db="expenses.db"):
         self.conn = sqlite3.connect(db)

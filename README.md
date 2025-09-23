@@ -5,7 +5,7 @@ You can add, update, and delete expenses, view your total spending, check your r
 
 <div align="center">
 <img src="https://i.ibb.co/SD4pb41D/python-klsf-Mn2c-PW.png" width="500" height="400"/>
-<img src="https://i.ibb.co/sdNMdDPz/python-4-Mo-G7-MN9gs.png" width="650" height="360"/>
+<img src="https://i.ibb.co/qM26MC3J/python-Lbk-OQd-UFh-L.png" width="650" height="360"/>
 </div>
 
 ---
@@ -17,13 +17,17 @@ You can add, update, and delete expenses, view your total spending, check your r
 - Total spent & monthly balance check with one click (balance will not show negative)
 - Upload receipt images and auto-extract items using OCR
 - Persistent storage using **SQLite**
-- Analytics & Forecast window:
-  - **Pie chart**: Spending by category
-  - **Line chart**: Monthly spending trends
-  - **Prediction**: Forecast next month’s expenses using linear regression
+- **Analytics & Forecast** window:
+  - **Bar / Pie chart**: Spending by category
+  - **Line chart**: Monthly spending trends including actuals + forecast
+  - **Prediction**: Forecast next month’s expenses using:
+    - Linear Regression (short history)
+    - Holt-Winters trend / seasonality (medium history)
+    - Prophet model (long history)
 - Beautiful dark theme UI with emoji buttons
 - Autocomplete for item names
 - Cross-platform (Windows, macOS, Linux)
+- Smooth forecast visualization with highlighted predicted points
 
 ---
 
